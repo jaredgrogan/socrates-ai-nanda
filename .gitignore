@@ -1,0 +1,14 @@
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+
+# Environment files
+.env
+
+# IDE settings
+.vscode/
+.idea/
+
+# Vercel
+.vercel/
