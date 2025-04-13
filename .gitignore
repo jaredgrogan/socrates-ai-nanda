@@ -1,14 +1,49 @@
 # Python virtual environment
 .venv/
+venv/
+env/
+*.env
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
+*.py[cod]
+*.class
 
-# Environment files
-.env
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
 
-# IDE settings
+# IDE and editor files
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Vercel
+# Vercel specific
 .vercel/
+
+# Logs
+*.log
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Specific to your project
+*.exe
+node.exe
+
+# Dependency directories
+node_modules/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment and configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
