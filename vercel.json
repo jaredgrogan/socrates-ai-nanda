@@ -3,21 +3,21 @@
   "builds": [
     {
       "src": "server.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "15mb",
+        "pythonVersion": "3.10"
+      }
     }
   ],
   "routes": [
     {
-      "src": "/sse",
-      "dest": "server.py"
-    },
-    {
-      "src": "/messages/(.*)",
-      "dest": "server.py"
-    },
-    {
       "src": "/(.*)",
       "dest": "server.py"
     }
-  ]
+  ],
+  "env": {
+    "PYTHON_VERSION": "3.10"
+  },
+  "public": true
 }
