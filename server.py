@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 
+# Create FastAPI app instead of Starlette
 app = FastAPI()
 
 # Configure CORS to be fully open
@@ -23,11 +24,12 @@ async def public_root():
         content={
             "status": "ok",
             "service": "Socrates NANDA Registry",
-            "version": "1.0.0",
+            "version": "3.0.0",
             "public_access": True,
             "endpoints": [
                 "/",
-                "/status"
+                "/status",
+                "/sse"
             ]
         }
     )
@@ -44,8 +46,3 @@ async def status():
             "message": "NANDA Registry endpoint is active"
         }
     )
-
-# For local development
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
