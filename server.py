@@ -1,9 +1,9 @@
 from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
-from mcp.server.sse import SseServerTransport
+from starlette.responses import JSONResponse, HTMLResponse
 from starlette.requests import Request
-from starlette.responses import HTMLResponse
 from starlette.routing import Mount, Route
+from mcp.server.sse import SseServerTransport
 from mcp.server import Server
 import uvicorn
 import os
@@ -41,6 +41,15 @@ async def homepage(request: Request) -> HTMLResponse:
     """
     return HTMLResponse(html_content)
 
+# New root endpoint for NANDA registry compatibility
+async def root_endpoint(request: Request) -> JSONResponse:
+    return JSONResponse({
+        "status": "ok",
+        "service": "Socrates AI MCP Server",
+        "version": "3.0.0",
+        "description": "Academic Research Assistant for searching, analyzing, and extracting insights from scientific papers"
+    })
+
 # Create a Starlette application with SSE transport
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     """Create a Starlette application for SSE transport."""
@@ -61,7 +70,8 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
     return Starlette(
         debug=debug,
         routes=[
-            Route("/", endpoint=homepage),
+            Route("/", endpoint=root_endpoint),  # Updated root endpoint
+            Route("/home", endpoint=homepage),  # Move previous homepage to /home
             Route("/sse", endpoint=handle_sse),
             Mount("/messages/", app=sse.handle_post_message),
         ],
