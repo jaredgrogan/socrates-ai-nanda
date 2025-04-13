@@ -10,17 +10,11 @@
       }
     }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "server.py"
-    }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/server.py" }
   ],
   "env": {
     "PYTHON_VERSION": "3.10"
   },
-  "public": true,
-  "rewrites": [
-    { "source": "/", "destination": "/server.py" }
-  ]
+  "public": true
 }
