@@ -1,86 +1,51 @@
-from mcp.server.fastmcp import FastMCP
-from starlette.applications import Starlette
-from starlette.responses import JSONResponse, HTMLResponse
-from starlette.requests import Request
-from starlette.routing import Mount, Route
-from mcp.server.sse import SseServerTransport
-from mcp.server import Server
-import uvicorn
-import os
-import logging
-from socrates import mcp
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app = FastAPI()
 
-# HTML for the homepage
-async def homepage(request: Request) -> HTMLResponse:
-    html_content = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Socrates MCP Server</title>
-        <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-                max-width: 800px;
-                margin: 0 auto;
-                padding: 20px;
-            }
-        </style>
-    </head>
-    <body>
-        <h1>Socrates Academic Research Assistant</h1>
-        <p>This MCP server provides ArXiv paper search and analysis capabilities.</p>
-        <p>Status: Running</p>
-        <p>Connect via a compatible MCP client like NANDA or Claude Desktop.</p>
-    </body>
-    </html>
+# Configure CORS to be fully open
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
+
+@app.get("/")
+async def public_root():
     """
-    return HTMLResponse(html_content)
-
-# New root endpoint for NANDA registry compatibility
-async def root_endpoint(request: Request) -> JSONResponse:
-    return JSONResponse({
-        "status": "ok",
-        "service": "Socrates AI MCP Server",
-        "version": "3.0.0",
-        "description": "Academic Research Assistant for searching, analyzing, and extracting insights from scientific papers"
-    })
-
-# Create a Starlette application with SSE transport
-def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
-    """Create a Starlette application for SSE transport."""
-    sse = SseServerTransport("/messages/")
-
-    async def handle_sse(request: Request) -> None:
-        async with sse.connect_sse(
-                request.scope,
-                request.receive,
-                request._send,
-        ) as (read_stream, write_stream):
-            await mcp_server.run(
-                read_stream,
-                write_stream,
-                mcp_server.create_initialization_options(),
-            )
-
-    return Starlette(
-        debug=debug,
-        routes=[
-            Route("/", endpoint=root_endpoint),  # Updated root endpoint
-            Route("/home", endpoint=homepage),  # Move previous homepage to /home
-            Route("/sse", endpoint=handle_sse),
-            Mount("/messages/", app=sse.handle_post_message),
-        ],
+    Public root endpoint for NANDA registry compatibility
+    """
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ok",
+            "service": "Socrates NANDA Registry",
+            "version": "1.0.0",
+            "public_access": True,
+            "endpoints": [
+                "/",
+                "/status"
+            ]
+        }
     )
 
-# Create the application
-mcp_server = mcp._mcp_server
-app = create_starlette_app(mcp_server, debug=True)
+@app.get("/status")
+async def status():
+    """
+    Simple status endpoint
+    """
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "running",
+            "message": "NANDA Registry endpoint is active"
+        }
+    )
 
 # For local development
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)
