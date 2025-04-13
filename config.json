@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "socrates-ai": {
+            "name": "Socrates Academic Research Assistant",
+            "version": "3.0.0",
+            "endpoint": "https://socrates-ai-nanda.vercel.app/sse",
+            "capabilities": [
+                "Scientific paper search",
+                "Research analysis", 
+                "Citation generation"
+            ]
+        }
+    }
+}
