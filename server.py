@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -13,18 +13,25 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-@app.get("/", response_class=JSONResponse)
+@app.get("/", status_code=status.HTTP_200_OK)
 async def root():
-    return {
-        "status": "public",
-        "service": "Socrates NANDA MCP",
-        "version": "1.0.0",
-        "public_access": True
-    }
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ok",
+            "service": "Socrates NANDA MCP",
+            "version": "1.0.0",
+            "public_access": True,
+            "message": "Endpoint successfully accessed"
+        }
+    )
 
-@app.get("/status", response_class=JSONResponse)
+@app.get("/status", status_code=status.HTTP_200_OK)
 async def status():
-    return {
-        "status": "running",
-        "message": "Endpoint is publicly accessible"
-    }
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "running",
+            "message": "Endpoint is publicly accessible"
+        }
+    )

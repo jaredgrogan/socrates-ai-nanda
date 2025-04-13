@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "public": true,
   "builds": [
     {
       "src": "server.py",
@@ -20,6 +21,5 @@
       },
       "dest": "server.py"
     }
-  ],
-  "public": true
+  ]
 }
