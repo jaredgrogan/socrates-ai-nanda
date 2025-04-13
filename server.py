@@ -3,7 +3,7 @@ from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from mcp.server.sse import SseServerTransport
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
 from starlette.routing import Mount, Route
 from mcp.server import Server
 import uvicorn
@@ -11,6 +11,7 @@ import os
 import logging
 import traceback
 import httpx
+import asyncio
 
 # Set up comprehensive logging
 logging.basicConfig(level=logging.INFO)
@@ -92,6 +93,30 @@ async def status_handler(request: Request) -> JSONResponse:
         status_code=200
     )
 
+# New SSE stream endpoint
+async def sse_stream(request: Request) -> StreamingResponse:
+    async def event_generator():
+        try:
+            while True:
+                # Generate MCP-compatible SSE events
+                yield f"data: {{\n"
+                yield f"  'type': 'keepalive',\n"
+                yield f"  'timestamp': {asyncio.get_event_loop().time()},\n"
+                yield f"  'tools': {list(mcp._tools.keys())}\n"
+                yield f"}}\n\n"
+                await asyncio.sleep(15)
+        except asyncio.CancelledError:
+            logger.info("SSE stream cancelled")
+
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
+    )
+
 # Create a Starlette application with SSE transport
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     """Create a Starlette application with SSE transport."""
@@ -120,6 +145,7 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
             Route("/", endpoint=homepage, methods=["GET"]),
             Route("/status", endpoint=status_handler, methods=["GET"]),
             Route("/sse", endpoint=handle_sse),
+            Route("/sse-stream", endpoint=sse_stream),
             Mount("/messages/", app=sse.handle_post_message),
         ]
     )
