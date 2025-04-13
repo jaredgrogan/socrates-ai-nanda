@@ -3,81 +3,112 @@ from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from mcp.server.sse import SseServerTransport
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
+from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Mount, Route
 from mcp.server import Server
 import uvicorn
 import os
 import logging
+import sys
 import traceback
 import httpx
-import asyncio
 import json
-import sys
 
-# Enhanced Logging Configuration
+# Enhanced logging configuration
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),  # Output to console
-        logging.FileHandler('/tmp/socrates_mcp_detailed.log', mode='a')  # Append mode for persistent logging
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger(__name__)
 
-# Comprehensive Exception Handling
-def log_unhandled_exceptions(exc_type, exc_value, exc_traceback):
-    logger.critical(
-        "Uncaught exception",
-        exc_info=(exc_type, exc_value, exc_traceback)
+# Initialize MCP server
+mcp = FastMCP("socrates")
+
+# Basic tool implementation
+@mcp.tool()
+async def server_info() -> str:
+    """Get information about the Socrates MCP server"""
+    return """
+    Socrates Academic Research Assistant
+    Version: 3.0.0
+    Owner: Universitas AI
+    Type: Model Context Protocol (MCP) Server
+    Capabilities: 
+    - Search for scientific papers
+    - Analyze academic research
+    - Generate citations
+    """
+
+@mcp.tool()
+async def arxiv_search(query: str, max_results: int = 5) -> str:
+    """Search for academic papers on arXiv"""
+    try:
+        async with httpx.AsyncClient() as client:
+            url = f"http://export.arxiv.org/api/query?search_query={query}&start=0&max_results={max_results}"
+            response = await client.get(url, timeout=10.0)
+            return f"Found papers matching query: {query}"
+    except Exception as e:
+        logger.error(f"ArXiv search error: {str(e)}")
+        return f"Error searching ArXiv: {str(e)}"
+
+# HTML for the homepage
+async def homepage(request: Request) -> HTMLResponse:
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Socrates API</title>
+        <style>
+            body {
+                font-family: -apple-system, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Socrates AI</h1>
+        <p>Academic Research Assistant by Universitas AI</p>
+        <p>Status: Running</p>
+    </body>
+    </html>
+    """
+    return HTMLResponse(html_content)
+
+# Status endpoint
+async def status_handler(request: Request) -> JSONResponse:
+    """Handle requests to the status endpoint"""
+    tools = []
+    try:
+        tools = list(mcp._tools.keys())
+    except Exception as e:
+        logger.error(f"Error getting tools: {e}")
+        
+    return JSONResponse(
+        content={
+            "status": "ok", 
+            "message": "Socrates API is running",
+            "tools": tools
+        }, 
+        status_code=200
     )
 
-sys.excepthook = log_unhandled_exceptions
-
-# Initialize MCP server with error handling
-try:
-    mcp = FastMCP("socrates")
-    logger.info("MCP Server initialized successfully")
-except Exception as e:
-    logger.critical(f"Failed to initialize MCP server: {e}")
-    logger.critical(traceback.format_exc())
-    raise
-
-# Use Vercel-compatible storage paths with extensive logging
-CACHE_DIR = "/tmp/socrates_cache"
-PDF_CACHE_DIR = "/tmp/socrates_pdfs"
-DOWNLOAD_DIR = "/tmp/arxiv_papers"
-
-# Create directories with comprehensive error handling
-try:
-    for directory in [CACHE_DIR, PDF_CACHE_DIR, DOWNLOAD_DIR]:
-        try:
-            os.makedirs(directory, exist_ok=True)
-            logger.info(f"Successfully created directory: {directory}")
-        except Exception as dir_error:
-            logger.error(f"Could not create directory {directory}: {dir_error}")
-except Exception as e:
-    logger.critical(f"Critical error creating directories: {e}")
-    logger.critical(traceback.format_exc())
-
-# Rest of the implementation remains the same as in the previous version...
-
-# Modified create_starlette_app with enhanced error handling
-def create_starlette_app(mcp_server: Server, *, debug: bool = True) -> Starlette:
-    """Create a Starlette application with enhanced error logging and diagnostics"""
+# Create a Starlette application with SSE transport
+def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
+    """Create a Starlette application with SSE transport."""
     sse = SseServerTransport(
         "/messages/", 
-        session_timeout=120,
-        max_connections=20
+        session_timeout=30,  # Reduced for Vercel
+        max_connections=5    # Reduced for Vercel
     )
     
     async def handle_sse(request: Request) -> None:
         try:
-            # Extensive connection logging
             logger.info(f"SSE connection attempt from {request.client}")
-            logger.info(f"Request headers: {dict(request.headers)}")
-            logger.info(f"Request scope: {request.scope}")
             
             async with sse.connect_sse(
                 request.scope,
@@ -85,7 +116,6 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = True) -> Starlette
                 request._send,
             ) as (read_stream, write_stream):
                 logger.info("SSE connection established successfully")
-                
                 try:
                     await mcp_server.run(
                         read_stream,
@@ -95,12 +125,10 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = True) -> Starlette
                 except Exception as run_error:
                     logger.error(f"MCP server run error: {run_error}")
                     logger.error(traceback.format_exc())
-                    raise
-        except Exception as connection_error:
-            logger.error(f"SSE connection error: {connection_error}")
+        except Exception as conn_error:
+            logger.error(f"SSE connection error: {conn_error}")
             logger.error(traceback.format_exc())
-            raise
-
+    
     # Create base app with routes
     app = Starlette(
         debug=debug,
@@ -108,24 +136,9 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = True) -> Starlette
             Route("/", endpoint=homepage, methods=["GET"]),
             Route("/status", endpoint=status_handler, methods=["GET"]),
             Route("/sse", endpoint=handle_sse),
-            Route("/sse-debug", endpoint=sse_debug),
             Mount("/messages/", app=sse.handle_post_message),
         ]
     )
-    
-    # Global exception handler
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception):
-        logger.critical(f"Unhandled exception in request: {exc}")
-        logger.critical(traceback.format_exc())
-        return JSONResponse(
-            status_code=500, 
-            content={
-                "error": "Internal Server Error",
-                "details": str(exc),
-                "traceback": traceback.format_exc()
-            }
-        )
     
     # Add CORS middleware
     app.add_middleware(
@@ -138,30 +151,17 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = True) -> Starlette
     
     return app
 
-# Comprehensive tool registration logging
-try:
-    registered_tools = list(mcp._tools.keys())
-    logger.info(f"Registered MCP Tools: {registered_tools}")
-except Exception as e:
-    logger.critical(f"Error retrieving registered tools: {e}")
-    logger.critical(traceback.format_exc())
-    registered_tools = []
-
-# Application creation with error handling
+# Application creation
 try:
     mcp_server = mcp._mcp_server
     app = create_starlette_app(mcp_server, debug=True)
-    logger.info("Application created successfully")
+    logger.info("MCP Server initialized successfully")
 except Exception as e:
-    logger.critical(f"Failed to create application: {e}")
+    logger.critical(f"Failed to initialize MCP server: {e}")
     logger.critical(traceback.format_exc())
     raise
 
 # For local development
 if __name__ == "__main__":
-    try:
-        uvicorn.run(app, host="0.0.0.0", port=8080)
-    except Exception as e:
-        logger.critical(f"Server startup failed: {e}")
-        logger.critical(traceback.format_exc())
-        raise
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run(app, host="0.0.0.0", port=port)
