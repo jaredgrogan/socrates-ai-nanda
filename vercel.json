@@ -19,5 +19,8 @@
   "env": {
     "PYTHON_VERSION": "3.10"
   },
-  "public": true
+  "public": true,
+  "rewrites": [
+    { "source": "/", "destination": "/server.py" }
+  ]
 }
