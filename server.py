@@ -9,28 +9,53 @@ from mcp.server import Server
 import uvicorn
 import os
 import logging
-from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
-from typing import Dict, Any
+import traceback
+import httpx
 
-# Import your MCP server - CRITICAL LINE
-from socrates import mcp
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+# Set up comprehensive logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Set up the application context
-@asynccontextmanager
-async def app_lifespan(server: Server) -> AsyncIterator[Dict[str, Any]]:
-    """Initialize application components"""
-    logger.info("Starting Socrates server")
-    # Initialize any resources you need
-    yield {}  # Empty context for now
-    logger.info("Shutting down Socrates server")
+# Initialize MCP server directly
+mcp = FastMCP("socrates")
+
+# Use Vercel-compatible storage paths
+CACHE_DIR = "/tmp/socrates_cache"
+PDF_CACHE_DIR = "/tmp/socrates_pdfs"
+DOWNLOAD_DIR = "/tmp/arxiv_papers"
+
+# Create directories with proper error handling
+try:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    os.makedirs(PDF_CACHE_DIR, exist_ok=True)
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+except Exception as e:
+    logger.warning(f"Could not create directories: {e}")
+
+# Basic tool implementation
+@mcp.tool()
+async def server_info() -> str:
+    """Get information about the Socrates MCP server"""
+    info = "Socrates Academic Research Assistant\n\n"
+    info += "Version: 3.0.0\n"
+    info += "Owner: Universitas AI\n"
+    info += "Type: Model Context Protocol (MCP) Server\n\n"
+    info += "Capabilities:\n"
+    info += "- Search arXiv for scientific papers\n"
+    info += "- Analyze and evaluate papers by relevance\n"
+    info += "- Generate proper academic citations\n"
+    return info
+
+@mcp.tool()
+async def arxiv_search(query: str, max_results: int = 5) -> str:
+    """Search for academic papers on arXiv"""
+    try:
+        async with httpx.AsyncClient() as client:
+            url = f"http://export.arxiv.org/api/query?search_query={query}&start=0&max_results={max_results}"
+            response = await client.get(url)
+            return f"Found papers matching '{query}'. First result: {response.text[:200]}..."
+    except Exception as e:
+        return f"Error searching ArXiv: {str(e)}"
 
 # HTML for the homepage
 async def homepage(request: Request) -> HTMLResponse:
@@ -43,30 +68,17 @@ async def homepage(request: Request) -> HTMLResponse:
         <title>Socrates API</title>
         <style>
             body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                 max-width: 800px;
                 margin: 0 auto;
                 padding: 20px;
             }
-            h1 {
-                margin-bottom: 10px;
-            }
-            p {
-                line-height: 1.6;
-            }
         </style>
     </head>
     <body>
-        <h1>Socrates API</h1>
-        <p>This is the Socrates academic research assistant API.</p>
+        <h1>Socrates AI</h1>
+        <p>Academic Research Assistant by Universitas AI</p>
         <p>Status: Running</p>
-        <p>This server provides academic research tools including:</p>
-        <ul>
-            <li>ArXiv paper search</li>
-            <li>Paper analysis</li>
-            <li>Citation generation</li>
-            <li>Research question answering</li>
-        </ul>
     </body>
     </html>
     """
@@ -76,13 +88,7 @@ async def homepage(request: Request) -> HTMLResponse:
 async def status_handler(request: Request) -> JSONResponse:
     """Handle requests to the status endpoint"""
     return JSONResponse(
-        content={
-            "status": "ok", 
-            "message": "Socrates API is running",
-            "version": "3.0.0",
-            "provider": "Universitas AI",
-            "service": "Socrates Academic Research Assistant"
-        }, 
+        content={"status": "ok", "message": "Socrates API is running"}, 
         status_code=200
     )
 
@@ -92,16 +98,20 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
     sse = SseServerTransport("/messages/")
     
     async def handle_sse(request: Request) -> None:
-        async with sse.connect_sse(
-            request.scope,
-            request.receive,
-            request._send,
-        ) as (read_stream, write_stream):
-            await mcp_server.run(
-                read_stream,
-                write_stream,
-                mcp_server.create_initialization_options(),
-            )
+        try:
+            async with sse.connect_sse(
+                request.scope,
+                request.receive,
+                request._send,
+            ) as (read_stream, write_stream):
+                await mcp_server.run(
+                    read_stream,
+                    write_stream,
+                    mcp_server.create_initialization_options(),
+                )
+        except Exception as e:
+            logger.error(f"SSE error: {traceback.format_exc()}")
+            raise
     
     # Create base app with routes
     app = Starlette(
@@ -111,11 +121,10 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
             Route("/status", endpoint=status_handler, methods=["GET"]),
             Route("/sse", endpoint=handle_sse),
             Mount("/messages/", app=sse.handle_post_message),
-        ],
-        lifespan=app_lifespan
+        ]
     )
     
-    # Add CORS middleware for broader compatibility
+    # Add CORS middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -126,13 +135,10 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
     
     return app
 
-def run_server(host="0.0.0.0", port=8080, debug=True):
-    """Run the Socrates MCP server"""
-    mcp_server = mcp._mcp_server
-    app = create_starlette_app(mcp_server, debug=debug)
-    uvicorn.run(app, host=host, port=port)
+# Application creation
+mcp_server = mcp._mcp_server
+app = create_starlette_app(mcp_server, debug=True)
 
+# For local development
 if __name__ == "__main__":
-    # Get port from environment or use default
-    port = int(os.environ.get("PORT", 8080))
-    run_server(port=port)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
