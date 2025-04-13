@@ -10,11 +10,16 @@
       }
     }
   ],
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/server.py" }
+  "routes": [
+    {
+      "src": "/(.*)",
+      "headers": {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,OPTIONS",
+        "Access-Control-Allow-Headers": "*"
+      },
+      "dest": "server.py"
+    }
   ],
-  "env": {
-    "PYTHON_VERSION": "3.10"
-  },
   "public": true
 }

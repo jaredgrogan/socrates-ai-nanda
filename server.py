@@ -1,11 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import JSONResponse
+from fastapi.responses import JSONResponse
 
-# Create FastAPI app instead of Starlette
 app = FastAPI()
 
-# Configure CORS to be fully open
+# Aggressive CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,35 +13,18 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-@app.get("/")
-async def public_root():
-    """
-    Public root endpoint for NANDA registry compatibility
-    """
-    return JSONResponse(
-        status_code=200,
-        content={
-            "status": "ok",
-            "service": "Socrates NANDA Registry",
-            "version": "3.0.0",
-            "public_access": True,
-            "endpoints": [
-                "/",
-                "/status",
-                "/sse"
-            ]
-        }
-    )
+@app.get("/", response_class=JSONResponse)
+async def root():
+    return {
+        "status": "public",
+        "service": "Socrates NANDA MCP",
+        "version": "1.0.0",
+        "public_access": True
+    }
 
-@app.get("/status")
+@app.get("/status", response_class=JSONResponse)
 async def status():
-    """
-    Simple status endpoint
-    """
-    return JSONResponse(
-        status_code=200,
-        content={
-            "status": "running",
-            "message": "NANDA Registry endpoint is active"
-        }
-    )
+    return {
+        "status": "running",
+        "message": "Endpoint is publicly accessible"
+    }
