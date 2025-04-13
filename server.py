@@ -12,9 +12,17 @@ import logging
 import traceback
 import httpx
 import asyncio
+import json
 
 # Set up comprehensive logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('/tmp/socrates_mcp.log')
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Initialize MCP server directly
@@ -89,24 +97,31 @@ async def homepage(request: Request) -> HTMLResponse:
 async def status_handler(request: Request) -> JSONResponse:
     """Handle requests to the status endpoint"""
     return JSONResponse(
-        content={"status": "ok", "message": "Socrates API is running"}, 
+        content={
+            "status": "ok", 
+            "message": "Socrates API is running",
+            "tools": list(mcp._tools.keys())
+        }, 
         status_code=200
     )
 
-# New SSE stream endpoint
-async def sse_stream(request: Request) -> StreamingResponse:
+# New SSE debug endpoint
+async def sse_debug(request: Request) -> StreamingResponse:
+    """Provide a debug SSE stream with server information"""
     async def event_generator():
         try:
             while True:
-                # Generate MCP-compatible SSE events
-                yield f"data: {{\n"
-                yield f"  'type': 'keepalive',\n"
-                yield f"  'timestamp': {asyncio.get_event_loop().time()},\n"
-                yield f"  'tools': {list(mcp._tools.keys())}\n"
-                yield f"}}\n\n"
+                # Generate detailed MCP-compatible SSE events
+                event_data = {
+                    "type": "server_debug",
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "tools": list(mcp._tools.keys()),
+                    "server_name": "Socrates MCP"
+                }
+                yield f"data: {json.dumps(event_data)}\n\n"
                 await asyncio.sleep(15)
         except asyncio.CancelledError:
-            logger.info("SSE stream cancelled")
+            logger.info("SSE debug stream cancelled")
 
     return StreamingResponse(
         event_generator(), 
@@ -118,24 +133,30 @@ async def sse_stream(request: Request) -> StreamingResponse:
     )
 
 # Create a Starlette application with SSE transport
-def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
+def create_starlette_app(mcp_server: Server, *, debug: bool = True) -> Starlette:
     """Create a Starlette application with SSE transport."""
-    sse = SseServerTransport("/messages/")
+    sse = SseServerTransport(
+        "/messages/", 
+        session_timeout=120,  # Increased session timeout
+        max_connections=20    # Increased max connections
+    )
     
     async def handle_sse(request: Request) -> None:
+        logger.info(f"SSE connection attempt from {request.client}")
         try:
             async with sse.connect_sse(
                 request.scope,
                 request.receive,
                 request._send,
             ) as (read_stream, write_stream):
+                logger.info("SSE connection established successfully")
                 await mcp_server.run(
                     read_stream,
                     write_stream,
                     mcp_server.create_initialization_options(),
                 )
         except Exception as e:
-            logger.error(f"SSE error: {traceback.format_exc()}")
+            logger.error(f"SSE connection error: {traceback.format_exc()}")
             raise
     
     # Create base app with routes
@@ -145,7 +166,7 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
             Route("/", endpoint=homepage, methods=["GET"]),
             Route("/status", endpoint=status_handler, methods=["GET"]),
             Route("/sse", endpoint=handle_sse),
-            Route("/sse-stream", endpoint=sse_stream),
+            Route("/sse-debug", endpoint=sse_debug),
             Mount("/messages/", app=sse.handle_post_message),
         ]
     )
@@ -160,6 +181,9 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
     )
     
     return app
+
+# Extensive logging of registered tools
+logger.info(f"Registered MCP Tools: {list(mcp._tools.keys())}")
 
 # Application creation
 mcp_server = mcp._mcp_server
