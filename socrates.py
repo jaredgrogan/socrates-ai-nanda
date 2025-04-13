@@ -1,34 +1,38 @@
-# socrates.py (wrapper)
+# Import all the tools and functionality from your original implementation
 from socrates_main import (
-    # Import all your tools and key functions
+    # Core MCP components
+    mcp,
+    
+    # All tools
     arxiv_search,
     analyze_papers,
-    read_papers,
+    read_papers, 
     research_question,
     academic_research,
     download_papers_to_user,
-    server_info,
     download_recent_papers,
     parse_download_request,
     handle_paper_command,
+    server_info,
     
-    # Import the MCP server and FastMCP instance
-    mcp,
-    FastMCP
+    # Constants and helpers
+    CACHE_DIR,
+    PDF_CACHE_DIR,
+    DOWNLOAD_DIR,
+    RECENT_PAPERS
 )
 
-# Re-export the MCP server and other critical components
+# Re-export everything to maintain the API
 __all__ = [
+    'mcp',
     'arxiv_search',
     'analyze_papers',
     'read_papers',
     'research_question',
     'academic_research',
     'download_papers_to_user',
-    'server_info',
     'download_recent_papers',
     'parse_download_request',
     'handle_paper_command',
-    'mcp',
-    'FastMCP'
+    'server_info',
 ]
