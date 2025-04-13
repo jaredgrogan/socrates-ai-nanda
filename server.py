@@ -21,15 +21,16 @@ mcp = FastMCP("socrates-ai")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Application lifespan management
-@asynccontextmanager
-async def app_lifespan(app: Starlette):
-    logger.info("Starting Socrates MCP Server")
-    yield
-    logger.info("Shutting down Socrates MCP Server")
+# Tracked tools list
+registered_tools = []
+
+def track_tool(func):
+    """Decorator to track registered tools"""
+    registered_tools.append(func.__name__)
+    return mcp.tool()(func)
 
 # Tools and Resources
-@mcp.tool()
+@track_tool
 async def get_server_info() -> str:
     """Provide comprehensive server information"""
     return """
@@ -43,13 +44,20 @@ async def get_server_info() -> str:
     - Citation generation
     """
 
-@mcp.tool()
+@track_tool
 async def search_arxiv(query: str, max_results: int = 5) -> str:
     """Search academic papers on arXiv"""
     async with httpx.AsyncClient() as client:
         url = f"http://export.arxiv.org/api/query?search_query={query}&start=0&max_results={max_results}"
         response = await client.get(url)
         return response.text
+
+# Application lifespan management
+@asynccontextmanager
+async def app_lifespan(app: Starlette):
+    logger.info("Starting Socrates MCP Server")
+    yield
+    logger.info("Shutting down Socrates MCP Server")
 
 # Create Starlette Application
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
@@ -76,7 +84,7 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
                 "version": "3.0.0",
                 "protocol": "Model Context Protocol",
                 "public_access": True,
-                "tools": list(mcp._tools.keys()),
+                "tools": registered_tools,
                 "message": "MCP Server successfully initialized"
             }
         )
